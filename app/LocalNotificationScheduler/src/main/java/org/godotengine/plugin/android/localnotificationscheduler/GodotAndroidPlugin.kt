@@ -1,22 +1,25 @@
 package org.godotengine.plugin.android.localnotificationscheduler
 
-import android.app.NotificationManager.IMPORTANCE_DEFAULT
+import android.app.NotificationManager.IMPORTANCE_MAX
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import android.util.Log
+import android.content.Intent
+import android.os.Build
+import androidx.core.content.edit
 import org.godotengine.godot.Godot
 import org.godotengine.godot.plugin.GodotPlugin
 import org.godotengine.godot.plugin.SignalInfo
 import org.godotengine.godot.plugin.UsedByGodot
 
-
 private const val REQUEST_NOTIF_PERMISSION = 1001
-
 
 @Suppress("unused")
 class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
 
     val notificationHandler = NotificationHandler()
-
 
     override fun getPluginName() = BuildConfig.GODOT_PLUGIN_NAME
 
@@ -34,45 +37,50 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
     ) {
         super.onMainRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_NOTIF_PERMISSION) {
-            if (grantResults != null && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                emitSignal("notification_permission_granted")
+            if (grantResults != null && grantResults.isNotEmpty() &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED
+            ) {
+                emitSignal("permission_granted")
                 Log.d(Constants.LOG_TAG, "Notification permission granted by user.")
             } else {
-                emitSignal("notification_permission_denied")
+                if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val prefs = activity!!.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+                    prefs.edit {
+                        putBoolean(
+                            Constants.NOTFI_PERFS_NAME,
+                            !activity!!.shouldShowRequestPermissionRationale(
+                                android.Manifest.permission.POST_NOTIFICATIONS
+                            )
+                        )
+                        apply()
+                    }
+                }
+
+                emitSignal("permission_denied")
                 Log.d(Constants.LOG_TAG, "Notification permission denied by user.")
             }
         }
     }
 
+    private fun putString(p0: String, p1: Boolean) {}
 
 
     @UsedByGodot
     fun requestNotificationPermission() {
-        notificationHandler.requestNotificationPermission(
-            activity
-        )
+        notificationHandler.requestNotificationPermission(activity)
     }
 
     @UsedByGodot
     fun hasNotificationPermission(): Boolean {
-        return notificationHandler.hasNotificationPermission(
-            activity
-        )
-    }
-
-
-    @UsedByGodot
-    fun requestExactAlarmPermission() {
-        notificationHandler.requestExactAlarmPermission(
-            activity
-        )
+        return notificationHandler.hasNotificationPermission(activity)
     }
 
     @UsedByGodot
-    fun canScheduleExactAlarms(): Boolean {
-        return notificationHandler.canScheduleExactAlarms(
-            activity
-        )
+    fun isNotificationPermissionPermanentlyDenied(): Boolean {
+        val activity = activity ?: return false
+
+        val prefs = activity.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getBoolean(Constants.NOTFI_PERFS_NAME, false)
     }
 
 
@@ -83,7 +91,6 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
             Constants.CHANNEL_ID
         )
     }
-
 
     @UsedByGodot
     fun scheduleNotification(
@@ -99,7 +106,7 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
             Constants.CHANNEL_ID,
             title,
             text,
-            IMPORTANCE_DEFAULT,
+            IMPORTANCE_MAX,
             true,
             trigger,
             interval
@@ -118,16 +125,28 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
             Constants.CHANNEL_ID,
             title,
             text,
-            IMPORTANCE_DEFAULT,
+            IMPORTANCE_MAX,
             true
         )
     }
 
     @UsedByGodot
     fun cancelScheduledNotification(id: Int) {
-        notificationHandler.cancelScheduledNotification(
-            activity,
-            id
-        )
+        notificationHandler.cancelScheduledNotification(activity, id)
+    }
+
+
+    @UsedByGodot
+    fun openAppSettings() {
+        activity?.let {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            intent.data = Uri.fromParts("package", it.packageName, null)
+            it.startActivity(intent)
+        }
+    }
+
+    @UsedByGodot
+    fun logMessage(message: String) {
+        Log.d(Constants.LOG_TAG, message)
     }
 }

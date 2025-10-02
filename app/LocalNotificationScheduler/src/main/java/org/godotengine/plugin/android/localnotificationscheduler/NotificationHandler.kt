@@ -10,13 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import android.provider.Settings
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import androidx.core.net.toUri
 
 
 class NotificationHandler {
@@ -128,29 +126,6 @@ class NotificationHandler {
     }
 
 
-    fun requestExactAlarmPermission(context: Context?) {
-        val context = context ?: return
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (!canScheduleExactAlarms(context)) {
-                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                intent.data = "package:${context.packageName}".toUri()
-                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }
-        }
-    }
-
-    fun canScheduleExactAlarms(context: Context?): Boolean {
-        val context = context ?: return false
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            return alarmManager.canScheduleExactAlarms()
-        }
-        return true
-    }
-
-
     fun createNotificationChannel(
         context : Context?,
         channelId : String
@@ -203,36 +178,11 @@ class NotificationHandler {
         )
 
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        if (canScheduleExactAlarms(context)) {
-            try {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    trigger,
-                    pendingIntent
-                )
-            } catch (secEx: SecurityException) {
-                Log.w(Constants.LOG_TAG, "Exact alarm blocked - falling back to inexact: ${secEx.message}")
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    trigger,
-                    pendingIntent
-                )
-            } catch (e: Exception) {
-                Log.e(Constants.LOG_TAG, "Unexpected error scheduling alarm", e)
-            }
-        } else {
-            // No exact alarm permission/approval -> fallback to best-effort inexact alarm
-            Log.w(Constants.LOG_TAG, "Cannot schedule exact alarm (not allowed). Using setAndAllowWhileIdle fallback.")
-            try {
-                alarmManager.setAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    trigger,
-                    pendingIntent
-                )
-            } catch (e: Exception) {
-                Log.e(Constants.LOG_TAG, "Failed to set fallback inexact alarm", e)
-            }
-        }
+        alarmManager.setAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            trigger,
+            pendingIntent
+        )
 
         saveNotification(
             context,
