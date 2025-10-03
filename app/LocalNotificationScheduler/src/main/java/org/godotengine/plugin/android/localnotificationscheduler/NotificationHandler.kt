@@ -135,20 +135,30 @@ class NotificationHandler {
         return candidate.timeInMillis + 7 * 24 * 60 * 60 * 1000L
     }
 
-    fun getPendingNotificationIntent(
+    fun addNotificationSettup(
         context : Context,
-        id: Int
-    ): PendingIntent {
-        val appClass = Class.forName("com.godot.game.GodotApp")
-        val appIntent = Intent(context, appClass).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        id : Int,
+        builder : NotificationCompat.Builder
+    ) {
+        builder
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setPriority(IMPORTANCE_MAX)
+            .setAutoCancel(true)
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        if (launchIntent != null) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+            val pendingAppIntent = PendingIntent.getActivity(
+                context,
+                id,
+                launchIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.setContentIntent(pendingAppIntent)
+        } else {
+            Log.w(Constants.LOG_TAG, "Could not obtain launch intent for package ${context.packageName}")
         }
-        return PendingIntent.getActivity(
-            context,
-            id,
-            appIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
     }
 
 
@@ -319,14 +329,10 @@ class NotificationHandler {
     ) {
         val context = context ?: return
 
-        val pendingNotificationIntent = getPendingNotificationIntent(context, id)
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.btn_star)
             .setContentTitle(title)
             .setContentText(text)
-            .setPriority(IMPORTANCE_MAX)
-            .setAutoCancel(true)
-            .setContentIntent(pendingNotificationIntent)
+        addNotificationSettup(context, id, builder)
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

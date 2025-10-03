@@ -2,7 +2,6 @@ package org.godotengine.plugin.android.localnotificationscheduler
 
 
 import android.app.NotificationManager
-import android.app.NotificationManager.IMPORTANCE_MAX
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -21,14 +20,10 @@ class NotificationReceiver : BroadcastReceiver() {
         val title = (info["title"] ?: "Reminder") as String
         val text = (info["text"] ?: "") as String
 
-        val pendingNotificationIntent = notificationHandler.getPendingNotificationIntent(context, id)
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle(title)
             .setContentText(text)
-            .setPriority(IMPORTANCE_MAX)
-            .setAutoCancel(true)
-            .setContentIntent(pendingNotificationIntent)
+        notificationHandler.addNotificationSettup(context, id, builder)
 
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(id, builder.build())

@@ -19,7 +19,6 @@ class BootReceiver : BroadcastReceiver() {
 
             for (idStr in ids) {
                 val id = idStr.toInt()
-
                 notificationHandler.refreshScheduleWeeklyNotification(context, id)
             }
         }
