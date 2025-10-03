@@ -149,9 +149,4 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
             it.startActivity(intent)
         }
     }
-
-    @UsedByGodot
-    fun logMessage(message: String) {
-        Log.d(Constants.LOG_TAG, message)
-    }
 }
