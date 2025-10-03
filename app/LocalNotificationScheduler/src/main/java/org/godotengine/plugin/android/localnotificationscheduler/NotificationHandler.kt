@@ -235,7 +235,10 @@ class NotificationHandler {
         minute: Int,
         daysOfWeek: List<Int>
     ) {
-        if (daysOfWeek.isEmpty()) return
+        if (daysOfWeek.isEmpty()) {
+            cancelScheduledNotification(context, id)
+            return
+        }
         val context = context ?:  return
 
         val intent = Intent(context, NotificationReceiver::class.java).apply {
