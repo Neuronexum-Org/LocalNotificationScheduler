@@ -4,9 +4,20 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <application>
+        <!--suppress AndroidDomInspection -->
+        <activity-alias
+            android:name=".GodotAlias"
+            android:targetActivity="com.godot.game.GodotApp"
+            android:launchMode="singleTop"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
         <receiver
             android:name="org.godotengine.plugin.android.localnotificationscheduler.NotificationReceiver"
-            android:exported="true"
             android:enabled="true" />
 
         <receiver

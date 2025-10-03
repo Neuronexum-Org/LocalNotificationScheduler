@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.NotificationManager.IMPORTANCE_MAX
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -18,16 +19,16 @@ import androidx.core.content.edit
 
 
 class NotificationHandler {
+        // NOTIFICATION DATA SAVE/ACCESS
     private fun saveNotification(
         context : Context,
         id: Int,
         channelId: String,
         title: String,
         text: String,
-        priority: Int,
-        autoCancel: Boolean,
-        triggerAtMillis: Long,
-        intervalMillis: Long?
+        hour: Int,
+        minute: Int,
+        daysOfWeek: List<Int>
     ) {
         val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -38,15 +39,9 @@ class NotificationHandler {
             putString("notif_${id}_channelId", channelId)
             putString("notif_${id}_title", title)
             putString("notif_${id}_text", text)
-            putInt("notif_${id}_priority", priority)
-            putBoolean("notif_${id}_autoCancel", autoCancel)
-            putLong("notif_${id}_trigger", triggerAtMillis)
-
-            if (intervalMillis != null) {
-                putLong("notif_${id}_interval", intervalMillis)
-            } else {
-                remove("notif_${id}_interval")
-            }
+            putInt("notif_${id}_hour", hour)
+            putInt("notif_${id}_minute", minute)
+            putStringSet("notif_${id}_daysOfWeek", daysOfWeek.map { it.toString() }.toSet())
 
             putStringSet(Constants.NOTIF_ID_NAME,ids)
 
@@ -64,13 +59,12 @@ class NotificationHandler {
         ids = ids.minus(id.toString())
 
         prefs.edit {
-            remove("notif_${id}_channel")
+            remove("notif_${id}_channelId")
             remove("notif_${id}_title")
             remove("notif_${id}_text")
-            remove("notif_${id}_priority")
-            remove("notif_${id}_autoCancel")
-            remove("notif_${id}_trigger")
-            remove("notif_${id}_interval")
+            remove("notif_${id}_hour")
+            remove("notif_${id}_minute")
+            remove("notif_${id}_daysOfWeek")
 
             putStringSet(Constants.NOTIF_ID_NAME,ids)
 
@@ -78,7 +72,87 @@ class NotificationHandler {
         }
     }
 
+    fun getNotification(
+        context : Context,
+        id: Int
+    ): Map<String, Any> {
+        val prefs = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
 
+        if (
+            !prefs.contains(Constants.NOTIF_ID_NAME) ||
+            !prefs.getStringSet(Constants.NOTIF_ID_NAME,  setOf<String>())!!.contains(id.toString())
+            ) {
+
+            Log.d(Constants.LOG_TAG, "Attempted to get info from unassigned notification id.")
+            return mapOf()
+        }
+
+        val channelId = prefs.getString("notif_${id}_channelId", "default") ?: "default"
+        val title = prefs.getString("notif_${id}_title", "Reminder") ?: "Reminder"
+        val text = prefs.getString("notif_${id}_text", "") ?: ""
+        val hour = prefs.getInt("notif_${id}_hour", 13)
+        val minute = prefs.getInt("notif_${id}_minute", 0)
+
+        val daysStrings = prefs.getStringSet("notif_${id}_daysOfWeek", emptySet<String>()) ?: emptySet<String>()
+        val days = daysStrings.map { it.toInt() }
+
+        return mapOf(
+            "id" to id,
+            "channelId" to channelId,
+            "title" to title,
+            "text" to text,
+            "hour" to hour,
+            "minute" to minute,
+            "daysOfWeek" to days
+        )
+    }
+
+
+    // HELPER METHODS
+    fun computeNextTriggerTime(daysOfWeek: List<Int>, hour: Int, minute: Int): Long {
+        val now = java.util.Calendar.getInstance()
+
+        val candidate = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, hour)
+            set(java.util.Calendar.MINUTE, minute)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+
+        // search up to 7 days ahead
+        for (i in 0..6) {
+            val day = (now.get(java.util.Calendar.DAY_OF_WEEK) + i - 1) % 7 + 1
+            if (daysOfWeek.contains(day)) {
+                candidate.set(java.util.Calendar.DAY_OF_WEEK, day)
+                if (candidate.timeInMillis > now.timeInMillis) {
+                    return candidate.timeInMillis
+                }
+            }
+            candidate.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+
+        // fallback: one week from now
+        return candidate.timeInMillis + 7 * 24 * 60 * 60 * 1000L
+    }
+
+    fun getPendingNotificationIntent(
+        context : Context,
+        id: Int
+    ): PendingIntent {
+        val appClass = Class.forName("com.godot.game.GodotApp")
+        val appIntent = Intent(context, appClass).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            id,
+            appIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+
+    // NOTIFICATION PERMISSION
     fun requestNotificationPermission(
         activity : Activity?
     ): Boolean {
@@ -126,6 +200,7 @@ class NotificationHandler {
     }
 
 
+    // NOTIFICATION CHANNEL
     fun createNotificationChannel(
         context : Context?,
         channelId : String
@@ -148,26 +223,23 @@ class NotificationHandler {
         }
     }
 
-    fun scheduleNotification(
-        context : Context?,
+
+    // SCHEDULE NOTIFICATION
+    fun scheduleWeeklyNotification(
+        context: Context?,
         id: Int,
         channelId: String,
         title: String,
         text: String,
-        priority : Int,
-        autoCancel: Boolean,
-        trigger: Long,
-        interval: Long?
+        hour: Int,
+        minute: Int,
+        daysOfWeek: List<Int>
     ) {
-        val context = context ?: return
+        if (daysOfWeek.isEmpty()) return
+        val context = context ?:  return
 
         val intent = Intent(context, NotificationReceiver::class.java).apply {
             putExtra("id", id)
-            putExtra("channelId", channelId)
-            putExtra("title", title)
-            putExtra("text", text)
-            putExtra("priority", priority)
-            putExtra("autoCancel", autoCancel)
         }
 
         val pendingIntent = PendingIntent.getBroadcast(
@@ -177,10 +249,12 @@ class NotificationHandler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val triggerAtMillis = computeNextTriggerTime(daysOfWeek, hour, minute)
+
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.setAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
-            trigger,
+            triggerAtMillis,
             pendingIntent
         )
 
@@ -190,15 +264,46 @@ class NotificationHandler {
             channelId,
             title,
             text,
-            priority,
-            autoCancel,
-            trigger,
-            interval
+            hour,
+            minute,
+            daysOfWeek
         )
 
-        Log.d(
-            Constants.LOG_TAG,
-            "Schedule Notification at triggerAtMillis '$trigger'"
+        Log.d(Constants.LOG_TAG, "Rolling notification scheduled for $triggerAtMillis ($daysOfWeek @ $hour:$minute)")
+    }
+
+    fun refreshScheduleWeeklyNotification(
+        context: Context?,
+        id: Int
+    ) {
+        val context = context ?:  return
+        Log.d(Constants.LOG_TAG, "Refreshing scheduled notification.")
+
+        val info = getNotification(context, id)
+        if (info.isEmpty()) {
+            Log.d(Constants.LOG_TAG, "No notification found.")
+            return
+        }
+
+        val channelId = (info["channelId"] ?: "default") as String
+        val title = (info["title"] ?: "Reminder") as String
+        val text = (info["text"] ?: "") as String
+        val hour = (info["hour"] ?: 13) as Int
+        val minute = (info["minute"] ?: 0) as Int
+        @Suppress("UNCHECKED_CAST")
+        val days = (info["daysOfWeek"] ?: listOf<Int>()) as List<Int>
+
+        Log.d(Constants.LOG_TAG, "Info: $info")
+
+        scheduleWeeklyNotification(
+            context,
+            id,
+            channelId,
+            title,
+            text,
+            hour,
+            minute,
+            days
         )
     }
 
@@ -207,18 +312,18 @@ class NotificationHandler {
         id: Int,
         channelId: String,
         title: String,
-        text: String,
-        priority : Int,
-        autoCancel: Boolean
+        text: String
     ) {
         val context = context ?: return
 
+        val pendingNotificationIntent = getPendingNotificationIntent(context, id)
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.btn_star)
             .setContentTitle(title)
             .setContentText(text)
-            .setPriority(priority)
-            .setAutoCancel(autoCancel)
+            .setPriority(IMPORTANCE_MAX)
+            .setAutoCancel(true)
+            .setContentIntent(pendingNotificationIntent)
 
         val manager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

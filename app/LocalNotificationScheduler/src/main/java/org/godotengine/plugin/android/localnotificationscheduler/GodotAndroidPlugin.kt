@@ -1,6 +1,5 @@
 package org.godotengine.plugin.android.localnotificationscheduler
 
-import android.app.NotificationManager.IMPORTANCE_MAX
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -93,23 +92,31 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
     }
 
     @UsedByGodot
-    fun scheduleNotification(
+    fun scheduleWeeklyNotification(
         id: Int,
         title: String,
         text: String,
-        trigger: Long,
-        interval: Long
+        hour: Int,
+        minute: Int,
+        daysOfWeek: IntArray
     ) {
-        notificationHandler.scheduleNotification(
+        notificationHandler.scheduleWeeklyNotification(
             activity,
             id,
             Constants.CHANNEL_ID,
             title,
             text,
-            IMPORTANCE_MAX,
-            true,
-            trigger,
-            interval
+            hour,
+            minute,
+            daysOfWeek.toList()
+        )
+    }
+
+    @UsedByGodot
+    fun refreshScheduleWeeklyNotification(id: Int) {
+        notificationHandler.refreshScheduleWeeklyNotification(
+            activity,
+            id
         )
     }
 
@@ -124,9 +131,7 @@ class GodotAndroidPlugin(godot: Godot) : GodotPlugin(godot) {
             id,
             Constants.CHANNEL_ID,
             title,
-            text,
-            IMPORTANCE_MAX,
-            true
+            text
         )
     }
 
